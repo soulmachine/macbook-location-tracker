@@ -99,7 +99,7 @@ if __name__ == "__main__":
 
     while True:
         try:
-            client = create_client()
+            client = create_client(mongodb_uri)
             db = client.get_database(DATABASE_NAME)
             collection = db.get_collection(collection_name)
             while True:
