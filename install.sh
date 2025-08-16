@@ -26,7 +26,7 @@ fi
 echo "📋 Checking dependencies..."
 
 # Get Python path
-PYTHON_PATH=$(whereis python | awk '{print $2}')
+PYTHON_PATH=$(whereis python3 | awk '{print $2}')
 if [ -z "$PYTHON_PATH" ]; then
     echo -e "${RED}❌ Python not found${NC}"
     echo "Please install Python first"
@@ -56,7 +56,7 @@ fi
 # Install Python dependencies
 echo ""
 echo "📦 Installing Python dependencies..."
-pip install -r requirements.txt
+$PYTHON_PATH -m pip install -r requirements.txt
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 
 # Get MongoDB URI from user

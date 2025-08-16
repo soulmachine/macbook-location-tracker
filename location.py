@@ -16,7 +16,7 @@ DATABASE_NAME = "macbook_location"
 
 logging.basicConfig(level=logging.WARN,
                     handlers=[logging.FileHandler(
-                        '/tmp/location-' + datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%d-%H-%M-%S') + '.log'),
+                        '/tmp/location-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d-%H-%M-%S') + '.log'),
                               logging.StreamHandler()])
 logger = logging.getLogger('location')
 
@@ -117,5 +117,5 @@ if __name__ == "__main__":
             error_message = f"Error: {e}"
             logger.error(f"Error: {e}")
             error_log_collection = db.get_collection(f"error_{serial_number}")
-            error_log_collection.insert_one({"error": error_message, "timestamp": datetime.datetime.now(datetime.UTC)})
+            error_log_collection.insert_one({"error": error_message, "timestamp": datetime.datetime.now(datetime.timezone.utc)})
             time.sleep(INTERVAL)
