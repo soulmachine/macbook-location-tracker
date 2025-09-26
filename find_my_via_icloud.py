@@ -3,6 +3,7 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "pyicloud",
+#     "pytz",
 # ]
 # ///
 """
@@ -24,6 +25,8 @@ Usage:
 import argparse
 import json
 import logging
+import os
+import pytz
 import sys
 import time
 from datetime import datetime, timezone
@@ -31,11 +34,19 @@ from zoneinfo import ZoneInfo
 
 from pyicloud import PyiCloudService  # pip install pyicloud
 
-logging.basicConfig(level=logging.INFO,
-                    handlers=[logging.FileHandler(
-                        '/tmp/find_my-' + datetime.now(ZoneInfo('America/Los_Angeles')).strftime('%Y-%m-%d-%H-%M-%S') + '.log'),
-                              logging.StreamHandler()])
-logger = logging.getLogger('find_my')
+# Setup logging with LA timezone
+LOG_FILE = os.getenv('LOG_FILE', 'find_my.log')
+logging.Formatter.converter = lambda self, t: datetime.fromtimestamp(t, tz=pytz.timezone('America/Los_Angeles')).timetuple()
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 INTERVAL = 300 # in seconds
 
