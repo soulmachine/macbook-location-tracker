@@ -48,13 +48,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-INTERVAL = 300 # in seconds
+# Dynamic interval configuration (in minutes)
+MIN_POLL_INTERVAL = 1  # minimum 1 minute
+MAX_POLL_INTERVAL_DAYTIME = 8  # maximum 8 minutes during daytime (10AM-6PM PST)
+MAX_POLL_INTERVAL_NIGHTTIME = 16    # maximum 16 minutes during nighttime
+DAYLIGHT_START_HOUR = 10  # 10 AM PST
+DAYLIGHT_END_HOUR = 18    # 6 PM PST
+LOCATION_PRECISION = 6  # decimal places for coordinate comparison
 
 def human_time(ms):
     if not ms:
         return None
     # Apple's timestamp is in milliseconds since epoch
     return datetime.fromtimestamp(int(ms)/1000.0, tz=ZoneInfo('America/Los_Angeles')).isoformat()
+
+def is_location_changed(prev: tuple, curr: tuple, precision: int = LOCATION_PRECISION) -> bool:
+    """
+    Compare two locations with specified precision to avoid false positives
+    due to GPS accuracy variations
+    """
+    if not prev or not curr:
+        return True
+    return round(prev[0], precision) != round(curr[0], precision) or \
+           round(prev[1], precision) != round(curr[1], precision)
+
+def get_max_poll_interval() -> int:
+    """
+    Returns the maximum polling interval based on current time.
+    During daylight hours (10AM-6PM PST), returns MAX_POLL_INTERVAL_DAYTIME,
+    otherwise returns MAX_POLL_INTERVAL_NIGHTTIME
+    """
+    current_time = datetime.now(pytz.timezone('America/Los_Angeles'))
+    current_hour = current_time.hour
+    if DAYLIGHT_START_HOUR <= current_hour < DAYLIGHT_END_HOUR:
+        return MAX_POLL_INTERVAL_DAYTIME
+    return MAX_POLL_INTERVAL_NIGHTTIME
 
 def require_2fa(api):
     if api.requires_2fa:
@@ -89,20 +117,63 @@ def main():
     # Handle Apple's 2FA / 2SA flows (once per trust period)
     require_2fa(api)
 
+    # Track previous locations and poll intervals per device
+    device_state = {}  # {device_id: {'location': (lat, lon), 'interval': minutes}}
+
     while True:
         # Check if Find My service is available
         logger.info("Fetching the device list")
         devices = api.devices
+
         # Enumerate devices
         with open("find_my.json", "a") as f:
             for device in devices:
                 location = device.data['location']
                 # only append devices with a valid location
                 if location and location['latitude'] and location['longitude']:
+                    device_id = device.data.get('id', device.data.get('name', 'unknown'))
+                    current_location = (location['latitude'], location['longitude'])
+
+                    # Initialize device state if first time
+                    if device_id not in device_state:
+                        device_state[device_id] = {
+                            'location': None,
+                            'interval': MIN_POLL_INTERVAL
+                        }
+
+                    previous_location = device_state[device_id]['location']
+
+                    # Check if location changed
+                    if is_location_changed(previous_location, current_location):
+                        # Reset interval to minimum when location changes
+                        device_state[device_id]['interval'] = MIN_POLL_INTERVAL
+                        logger.info(f"Device {device.data['name']} moved to {current_location}")
+                    else:
+                        # Double the interval up to maximum when location doesn't change
+                        old_interval = device_state[device_id]['interval']
+                        device_state[device_id]['interval'] = min(
+                            old_interval * 2,
+                            get_max_poll_interval()
+                        )
+                        logger.info(f"Device {device.data['name']} remained at {current_location}")
+
+                    # Update location
+                    device_state[device_id]['location'] = current_location
+
+                    # Write to file
                     location['timestamp_str'] = human_time(location['timeStamp'])
                     device.data['updated_at'] = human_time(time.time() * 1000)
                     f.write(f"{json.dumps(device.data)}\n")
-        time.sleep(INTERVAL)
+
+        # Use the minimum interval across all devices
+        if device_state:
+            next_interval = min(state['interval'] for state in device_state.values())
+            logger.info(f"Next poll in {next_interval} minutes")
+            time.sleep(next_interval * 60)
+        else:
+            # No devices found, use minimum interval
+            logger.warning("No devices with valid locations found")
+            time.sleep(MIN_POLL_INTERVAL * 60)
 
 if __name__ == "__main__":
     main()
