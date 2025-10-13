@@ -2,7 +2,7 @@
 # /// script
 # requires-python = ">=3.13"
 # dependencies = [
-#     "pyicloud",
+#     "pyicloud>=2.1.0",
 #     "pytz",
 # ]
 # ///
@@ -105,11 +105,11 @@ def main():
     try:
         if args.china:
             # For Chinese Apple IDs, use the China domain
-            api = PyiCloudService(args.username, args.password, china_mainland=True) if args.password \
-                  else PyiCloudService(args.username, china_mainland=True)
+            api = PyiCloudService(args.username, args.password, accept_terms=True, china_mainland=True) if args.password \
+                  else PyiCloudService(args.username, accept_terms=True, china_mainland=True)
         else:
-            api = PyiCloudService(args.username, args.password) if args.password \
-                  else PyiCloudService(args.username)
+            api = PyiCloudService(args.username, args.password, accept_terms=True) if args.password \
+                  else PyiCloudService(args.username, accept_terms=True)
     except Exception as e:
         logger.error(f"Login error: {e}")
         sys.exit(1)
