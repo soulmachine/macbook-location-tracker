@@ -3,7 +3,8 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "pyicloud>=2.1.0",
-#     "pytz",
+#     "click",
+#     "pytz"
 # ]
 # ///
 """
@@ -84,16 +85,48 @@ def get_max_poll_interval() -> int:
         return MAX_POLL_INTERVAL_DAYTIME
     return MAX_POLL_INTERVAL_NIGHTTIME
 
-def require_2fa(api):
+def authenticate(api):
+    ''' Doc: https://github.com/picklepete/pyicloud#two-step-and-two-factor-authentication-2sa2fa '''
     if api.requires_2fa:
         logger.info("Two-factor authentication required.")
-        code = input("Enter the 2FA code sent to your device: ").strip()
-        if not api.validate_2fa_code(code):
-            logger.error("Invalid code. Exiting.")
+        code = input("Enter the code you received at one of your approved devices: ").strip()
+        result = api.validate_2fa_code(code)
+        logger.info("Code validation result: %s" % result)
+
+        if not result:
+            logger.error("Failed to verify security code")
             sys.exit(1)
+
         if not api.is_trusted_session:
-            logger.error("Trusting session…")
-            api.trust_session()
+            logger.warning("Session is not trusted. Requesting trust...")
+            result = api.trust_session()
+            logger.info("Session trust result %s" % result)
+
+            if not result:
+                logger.warning("Failed to request trust. You will likely be prompted for the code again in the coming weeks")
+    elif api.requires_2sa:
+        import click
+        logger.info("Two-step authentication required. Your trusted devices are:")
+
+        devices = api.trusted_devices
+        for i, device in enumerate(devices):
+            logger.info(
+                "  %s: %s" % (i, device.get('deviceName',
+                "SMS to %s" % device.get('phoneNumber')))
+            )
+
+        device = click.prompt('Which device would you like to use?', default=0)
+        device = devices[device]
+        if not api.send_verification_code(device):
+            logger.error("Failed to send verification code")
+            sys.exit(1)
+
+        code = click.prompt('Please enter validation code')
+        if not api.validate_verification_code(device, code):
+            logger.error("Failed to verify verification code")
+            sys.exit(1)
+    else:
+        logger.info("Already authenticated")
 
 def main():
     parser = argparse.ArgumentParser(description="List iCloud / Find My devices and locations")
@@ -114,8 +147,8 @@ def main():
         logger.error(f"Login error: {e}")
         sys.exit(1)
 
-    # Handle Apple's 2FA / 2SA flows (once per trust period)
-    require_2fa(api)
+    # Handle Apple's 2FA / 2SA authentication
+    authenticate(api)
 
     # Track previous locations and poll intervals per device
     device_state = {}  # {device_id: {'location': (lat, lon), 'interval': minutes}}
