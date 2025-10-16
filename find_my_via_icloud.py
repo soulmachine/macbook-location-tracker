@@ -3,7 +3,6 @@
 # requires-python = ">=3.13"
 # dependencies = [
 #     "pyicloud>=2.1.0",
-#     "click",
 #     "pytz"
 # ]
 # ///
@@ -105,7 +104,6 @@ def authenticate(api):
             if not result:
                 logger.warning("Failed to request trust. You will likely be prompted for the code again in the coming weeks")
     elif api.requires_2sa:
-        import click
         logger.info("Two-step authentication required. Your trusted devices are:")
 
         devices = api.trusted_devices
@@ -115,13 +113,14 @@ def authenticate(api):
                 "SMS to %s" % device.get('phoneNumber')))
             )
 
-        device = click.prompt('Which device would you like to use?', default=0)
-        device = devices[device]
+        device_input = input('Which device would you like to use? [0]: ').strip()
+        device_index = int(device_input) if device_input else 0
+        device = devices[device_index]
         if not api.send_verification_code(device):
             logger.error("Failed to send verification code")
             sys.exit(1)
 
-        code = click.prompt('Please enter validation code')
+        code = input('Please enter validation code: ').strip()
         if not api.validate_verification_code(device, code):
             logger.error("Failed to verify verification code")
             sys.exit(1)
